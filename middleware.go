@@ -22,6 +22,8 @@
 package fiberprometheus
 
 import (
+	"github.com/gofiber/fiber/v2/utils"
+	"log"
 	"strconv"
 	"time"
 
@@ -35,9 +37,9 @@ import (
 // FiberPrometheus ...
 type FiberPrometheus struct {
 	gatherer        prometheus.Gatherer
-	requestsTotal   *prometheus.CounterVec
-	requestDuration *prometheus.HistogramVec
-	requestInFlight *prometheus.GaugeVec
+	requestsTotal   prometheus.CounterVec
+	requestDuration prometheus.HistogramVec
+	requestInFlight prometheus.GaugeVec
 	defaultURL      string
 }
 
@@ -117,9 +119,9 @@ func create(registry prometheus.Registerer, serviceName, namespace, subsystem st
 
 	return &FiberPrometheus{
 		gatherer:        gatherer,
-		requestsTotal:   counter,
-		requestDuration: histogram,
-		requestInFlight: gauge,
+		requestsTotal:   *counter,
+		requestDuration: *histogram,
+		requestInFlight: *gauge,
 		defaultURL:      "/metrics",
 	}
 }
@@ -166,7 +168,7 @@ func NewWithRegistry(registry prometheus.Registerer, serviceName, namespace, sub
 }
 
 // RegisterAt will register the prometheus handler at a given URL
-func (ps *FiberPrometheus) RegisterAt(app fiber.Router, url string, handlers ...fiber.Handler) {
+func (ps FiberPrometheus) RegisterAt(app fiber.Router, url string, handlers ...fiber.Handler) {
 	ps.defaultURL = url
 
 	h := append(handlers, adaptor.HTTPHandler(promhttp.HandlerFor(ps.gatherer, promhttp.HandlerOpts{})))
@@ -174,11 +176,11 @@ func (ps *FiberPrometheus) RegisterAt(app fiber.Router, url string, handlers ...
 }
 
 // Middleware is the actual default middleware implementation
-func (ps *FiberPrometheus) Middleware(ctx *fiber.Ctx) error {
+func (ps FiberPrometheus) Middleware(ctx *fiber.Ctx) error {
 	start := time.Now()
 	method := ctx.Method()
 
-	if ctx.Path() == ps.defaultURL {
+	if ctx.Route().Path == ps.defaultURL {
 		return ctx.Next()
 	}
 
@@ -200,13 +202,25 @@ func (ps *FiberPrometheus) Middleware(ctx *fiber.Ctx) error {
 		status = ctx.Response().StatusCode()
 	}
 
-	path := ctx.Path()
-
 	statusCode := strconv.Itoa(status)
-	ps.requestsTotal.WithLabelValues(statusCode, method, path).Inc()
-
 	elapsed := float64(time.Since(start).Nanoseconds()) / 1e9
-	ps.requestDuration.WithLabelValues(statusCode, method, path).Observe(elapsed)
-
+	ps.record(getPath(ctx), method, statusCode, elapsed)
 	return err
+}
+
+func getPath(ctx *fiber.Ctx) string {
+	path := utils.CopyString(ctx.Route().Path)
+	if path == "/" && path != ctx.Path() {
+		path = utils.CopyString(ctx.Path())
+	}
+
+	return path
+}
+
+func (ps FiberPrometheus) record(path, method, statusCode string, elapsed float64) {
+	log.Printf("path '%s'", path)
+	p := path
+	ps.requestsTotal.WithLabelValues(statusCode, method, p).Inc()
+
+	ps.requestDuration.WithLabelValues(statusCode, method, p).Observe(elapsed)
 }
