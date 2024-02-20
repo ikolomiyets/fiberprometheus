@@ -23,7 +23,6 @@ package fiberprometheus
 
 import (
 	"github.com/gofiber/fiber/v2/utils"
-	"log"
 	"strconv"
 	"time"
 
@@ -218,7 +217,6 @@ func getPath(ctx *fiber.Ctx) string {
 }
 
 func (ps FiberPrometheus) record(path, method, statusCode string, elapsed float64) {
-	log.Printf("path '%s'", path)
 	p := path
 	ps.requestsTotal.WithLabelValues(statusCode, method, p).Inc()
 
