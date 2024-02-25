@@ -177,7 +177,7 @@ func (ps FiberPrometheus) RegisterAt(app fiber.Router, url string, handlers ...f
 // Middleware is the actual default middleware implementation
 func (ps FiberPrometheus) Middleware(ctx *fiber.Ctx) error {
 	start := time.Now()
-	method := ctx.Method()
+	method := utils.CopyString(ctx.Method())
 
 	if ctx.Route().Path == ps.defaultURL {
 		return ctx.Next()
